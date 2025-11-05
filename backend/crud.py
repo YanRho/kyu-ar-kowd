@@ -1,0 +1,25 @@
+from sqlalchemy.orm import Session
+from .models import QR
+from .utils import gen_slug
+from typing import List
+
+
+# Create a new QR code record
+def create_qr(db: Session, title: str, target_url: str, note: str | None = None) -> QR:
+    slug = gen_slug()
+    # ensure uniqueness 
+    while db.query(QR).filter_by(slug=slug).first() is not None: 
+        slug = gen_slug()
+    q = QR(slug=slug, title=title, target_url=target_url, note=note)
+    db.add(q)
+    db.commit()
+    db.refresh(q)
+    return q
+
+# List QR codes with optional limit
+def list_qrs(db: Session, limit: int = 100) -> List[QR]:
+    return db.query(QR).order_by(QR.created_at.desc()).limit(limit).all()
+
+# Get a QR code by its slug
+def get_qr_by_slug(db: Session, slug: str) -> QR | None:
+    return db.query(QR).filter_by(slug-slug).first()
