@@ -1,5 +1,5 @@
-from fastapi import FastAPI, Query, HTTPException, Depends
-from fastapi.responses import StreamingResponse, PlainTextResponse
+from fastapi import FastAPI, Query, HTTPException, Depends, Request
+from fastapi.responses import StreamingResponse, PlainTextResponse, RedirectResponse
 from pydantic import BaseModel, AnyUrl
 from urllib.parse import unquote
 from io import BytesIO
@@ -8,6 +8,7 @@ import segno
 from backend.db import Base, engine, get_db
 from backend.models import QR
 from backend import crud
+from backend.utils import mask_ip
 
 # create tables at startup 
 Base.metadata.create_all(bind=engine)
@@ -25,7 +26,7 @@ def read_root():
 # Generate the QR code 
 def qr_bytes(data: str, kind: str = "png", scale: int = 8, border: int = 2) -> BytesIO:
     if not data or data.strip() == "":
-        raise HTTPException(status_code=400, details="Missing 'data' to encode")
+        raise HTTPException(status_code=400, detail="Missing 'data' to encode")
     
     # Accept already-encoded query strings
     payload = unquote(data)
@@ -94,7 +95,7 @@ class QROut(BaseModel):
 # Create a new QR code record
 @app.post("/api/qr", response_model=QROut)
 def api_create_qr(payload: QRIn, db=Depends(get_db)):
-    q = crud.create_qr(db, title=payload.title, target_url=str(payload.target_url, note=payload.note))
+    q = crud.create_qr(db, title=payload.title, target_url=str(payload.target_url), note=payload.note)
     return QROut.from_model(q)
 
 # List QR Codes
@@ -103,10 +104,48 @@ def api_list_qr(db=Depends(get_db)):
     items = crud.list_qrs(db)
     return [QROut.from_model(x) for x in items]
 
-# Get QR by slug
+# Get QR by slug 
 @app.get("/api/qr/{slug}", response_model=QROut)
 def api_get_qr(slug: str, db=Depends(get_db)):
     q = crud.get_qr_by_slug(db, slug)
     if not q:
         raise HTTPException(404, "QR code not found")
     return QROut.from_model(q)
+
+
+# Redirect endpoint and scan recording so that we can track scans 
+@app.get("/r/{slug}")
+def redirect_to_target(slug: str, request: Request, db=Depends(get_db)):
+    q = crud.get_qr_by_slug(db, slug)
+    if not q:
+        raise HTTPException(404, "QR not found")
+
+    ref = request.headers.get("referer")
+    ua = request.headers.get("user-agent")
+    ip = request.client.host if request.client else None
+    crud.record_scan(db, q, ref, ua, mask_ip(ip))
+
+    return RedirectResponse(q.target_url, status_code=302)
+
+# Stats endpoint for a QR code so that we can see scan events 
+@app.get("/api/qr/{slug}/stats")
+def stats(slug: str, db=Depends(get_db)):
+    q = crud.get_qr_by_slug(db, slug)
+    if not q:
+        raise HTTPException(404, "Not found")
+
+    return {
+        "slug": q.slug,
+        "title": q.title,
+        "scans_count": q.scans_count,
+        "created_at": q.created_at.isoformat(),
+        "recent": [
+            {
+                "ts": s.timestamp.isoformat(),
+                "referrer": s.referrer,
+                "user_agent": s.user_agent,
+                "ip": s.ip,
+            }
+            for s in sorted(q.scans, key=lambda s: s.timestamp, reverse=True)[:50]
+        ],
+    }
