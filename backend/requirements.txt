@@ -3,3 +3,5 @@ uvicorn[standard]==0.30.6
 segno==1.6.1
 sqlalchemy==2.0.36
 python-dotenv==1.0.1
+qrcode[pil] 
+pillow
