@@ -1,5 +1,6 @@
 from fastapi import FastAPI, Query, HTTPException, Depends, Request
 from fastapi.responses import StreamingResponse, PlainTextResponse, RedirectResponse
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, AnyUrl
 from urllib.parse import unquote
 from io import BytesIO
@@ -16,6 +17,13 @@ Base.metadata.create_all(bind=engine)
 # Create the FastAPI instance
 app = FastAPI(title="Kyu-Ar-API")
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # a get endpoint at the root 
 @app.get("/")
