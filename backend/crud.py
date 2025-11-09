@@ -5,14 +5,17 @@ from typing import List
 from datetime import datetime, timezone
 
 
-def create_qr(db: Session, title: str, target_url: str, note: str | None = None) -> QR:
-    """
-    Create a new QR entry with a readable, unique slug.
-    """
-    # Generate initial slug based on title
+def create_qr(
+    db: Session,
+    title: str,
+    target_url: str | None = None,
+    note: str | None = None,
+    type: str = "URL",
+    data: dict | None = None,
+) -> QR:
     slug = gen_slug(title)
 
-    # Ensure uniqueness by appending -2, -3, etc. if needed
+    # ensure uniqueness
     base_slug = slug
     i = 2
     while db.query(QR).filter_by(slug=slug).first() is not None:
@@ -22,7 +25,9 @@ def create_qr(db: Session, title: str, target_url: str, note: str | None = None)
     q = QR(
         slug=slug,
         title=title,
+        type=type,
         target_url=target_url,
+        data=data,
         note=note,
         created_at=datetime.now(timezone.utc),
     )
@@ -30,6 +35,7 @@ def create_qr(db: Session, title: str, target_url: str, note: str | None = None)
     db.commit()
     db.refresh(q)
     return q
+
 
 
 def list_qrs(db: Session, limit: int = 100) -> List[QR]:
