@@ -1,3 +1,4 @@
+from urllib import request
 from fastapi import FastAPI, Query, HTTPException, Depends, Request
 from fastapi.responses import StreamingResponse, PlainTextResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -146,8 +147,19 @@ def qr_png(
         if not q:
             raise HTTPException(status_code=404, detail="QR not found")
 
-        base = os.getenv("PUBLIC_BASE_URL") or str(request.base_url).rstrip("/")
+        # --- Determine public base URL safely ---
+        base = os.getenv("PUBLIC_BASE_URL")
+        if not base:
+            # fallback: derive from request.base_url but clean it up
+            url = str(request.base_url).rstrip("/")
+            if "localhost" in url or "127.0.0.1" in url or "192." in url:
+                # Default to a nicer local placeholder for dev
+                base = "http://localhost:8000"
+            else:
+                base = url
+
         data = f"{base}/r/{q.slug}"
+
 
     # 🧠 Call our gradient-aware QR generator
     img = qr_bytes(
